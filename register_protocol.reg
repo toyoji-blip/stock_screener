@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\run-stock-app]
+@="URL:Run Stock App Protocol"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\run-stock-app\shell]
+
+[HKEY_CLASSES_ROOT\run-stock-app\shell\open]
+
+[HKEY_CLASSES_ROOT\run-stock-app\shell\open\command]
+@="\"C:\\Users\\toyoj\\Documents\\stock-screening-webapp\\run_app.bat\""

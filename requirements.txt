@@ -1,0 +1,10 @@
+flask
+yfinance
+pandas
+numpy
+matplotlib
+pytz
+openpyxl
+requests
+beautifulsoup4
+lxml

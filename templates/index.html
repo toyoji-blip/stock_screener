@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>株式財務スクリーニングツール</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F7F8FA;
+    --panel:#FFFFFF;
+    --ink:#1B2430;
+    --sub:#5B6B7C;
+    --line:#D8DEE4;
+    --line-soft:#E8ECEF;
+    --pos:#1F6F54;
+    --neg:#B23A48;
+    --navy:#17375E;
+    --amber:#B8862E;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;
+    min-height:100vh;
+  }
+  .mono{font-family:"JetBrains Mono","SF Mono",Consolas,monospace;}
+  .serif{font-family:"Noto Serif JP",serif;}
+
+  /* ── ティッカーテープ（署名要素） ───────────────── */
+  #ticker{
+    position:sticky; top:0; z-index:20;
+    background:var(--navy); color:#EAF0F6;
+    font-family:"JetBrains Mono",monospace;
+    font-size:12.5px;
+    letter-spacing:.03em;
+    padding:9px 20px;
+    display:flex; gap:28px; align-items:center;
+    overflow-x:auto; white-space:nowrap;
+    border-bottom:1px solid #0e2740;
+  }
+  #ticker .tk-item{opacity:.55;}
+  #ticker .tk-item.filled{opacity:1;}
+  #ticker .tk-label{color:#8FAFCB; margin-right:6px;}
+  #ticker .tk-val{color:#fff; font-weight:500;}
+  #ticker .tk-val.pos{color:#5FD3A6;}
+  #ticker .tk-val.neg{color:#F0919C;}
+
+  /* ── レイアウト ─────────────────────────────── */
+  .shell{
+    max-width:1040px; margin:0 auto;
+    padding:38px 24px 80px;
+    display:grid;
+    grid-template-columns:200px 1fr;
+    gap:36px;
+  }
+  header.page-head{
+    grid-column:1 / -1;
+    margin-bottom:6px;
+  }
+  header.page-head h1{
+    font-family:"Noto Serif JP",serif;
+    font-weight:700;
+    font-size:26px;
+    margin:0 0 4px;
+    letter-spacing:.01em;
+  }
+  header.page-head p{
+    margin:0; color:var(--sub); font-size:13.5px;
+  }
+
+  /* ── ステップレール ─────────────────────────── */
+  nav.rail{
+    display:flex; flex-direction:column; gap:2px;
+    padding-top:6px;
+  }
+  .rail-step{
+    display:flex; gap:12px; align-items:flex-start;
+    padding:12px 0; position:relative;
+  }
+  .rail-step:not(:last-child)::after{
+    content:""; position:absolute; left:13px; top:34px; bottom:-6px;
+    width:1px; background:var(--line);
+  }
+  .rail-num{
+    flex:none; width:27px; height:27px; border-radius:50%;
+    border:1.5px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    font-family:"JetBrains Mono",monospace; font-size:12px; font-weight:700;
+    color:var(--sub); background:var(--panel);
+    transition:all .25s ease;
+  }
+  .rail-step.active .rail-num{
+    border-color:var(--navy); color:#fff; background:var(--navy);
+  }
+  .rail-step.done .rail-num{
+    border-color:var(--pos); color:#fff; background:var(--pos);
+  }
+  .rail-text .t1{font-size:13.5px; font-weight:700; color:var(--ink);}
+  .rail-step:not(.active):not(.done) .rail-text .t1{color:var(--sub);}
+  .rail-text .t2{font-size:11.5px; color:var(--sub); margin-top:1px;}
+
+  /* ── タブバー ───────────────────────────────── */
+  .tabbar{
+    max-width:1040px; margin:0 auto; padding:22px 24px 0;
+    display:flex; gap:4px;
+  }
+  .tab-btn{
+    appearance:none; border:none; cursor:pointer; background:transparent;
+    font-family:"Noto Sans JP",sans-serif; font-weight:700; font-size:13.5px;
+    color:var(--sub); padding:10px 18px; border-radius:8px 8px 0 0;
+    border:1px solid transparent; border-bottom:none;
+    transition:color .15s, background .15s;
+  }
+  .tab-btn:hover{color:var(--ink);}
+  .tab-btn.active{
+    color:var(--navy); background:var(--panel);
+    border-color:var(--line);
+  }
+
+  .shell-single{
+    max-width:1040px; margin:0 auto; padding:0 24px 80px;
+    display:flex; flex-direction:column; gap:18px;
+  }
+  .shell-single .page-head{margin-top:14px;}
+
+  /* ── 履歴検索・一覧 ─────────────────────────── */
+  .history-search-row{
+    display:flex; gap:10px; margin-bottom:8px; max-width:520px;
+  }
+  .history-search-row input{flex:1;}
+  table.history-table td, table.history-table th{text-align:left;}
+  table.history-table td:last-child{white-space:nowrap;}
+  table.history-table td:nth-child(3),
+  table.history-table td:nth-child(4),
+  table.history-table td:nth-child(5){text-align:right;}
+  table.history-table th:nth-child(3),
+  table.history-table th:nth-child(4),
+  table.history-table th:nth-child(5){text-align:right;}
+  table.history-table tbody tr{cursor:pointer; transition:background .12s;}
+  table.history-table tbody tr:hover{background:#F2F5F8;}
+  table.history-table .btn-view-row{
+    background:transparent; color:var(--navy); border:1.5px solid var(--line);
+    font-size:12px; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:700;
+  }
+  table.history-table .btn-view-row:hover{border-color:var(--navy); background:#F2F5F8;}
+  table.history-table .btn-delete-row{
+    background:transparent; color:var(--neg); border:1.5px solid var(--line);
+    font-size:12px; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:700;
+    margin-left:6px;
+  }
+  table.history-table .btn-delete-row:hover{border-color:var(--neg); background:#FBEEEF;}
+  .btn.danger{
+    background:transparent; color:var(--neg); border:1.5px solid var(--line);
+  }
+  .btn.danger:hover{border-color:var(--neg); background:#FBEEEF;}
+  .empty-hint{
+    text-align:center; color:var(--sub); font-size:13.5px; padding:36px 0;
+  }
+
+  /* ── パネル ─────────────────────────────────── */
+  main.panels{display:flex; flex-direction:column; gap:18px;}
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:26px 28px;
+    display:none;
+    animation:rise .35s ease;
+  }
+  .panel.show{display:block;}
+  @keyframes rise{
+    from{opacity:0; transform:translateY(6px);}
+    to{opacity:1; transform:translateY(0);}
+  }
+  .panel h2{
+    font-family:"Noto Serif JP",serif; font-size:17px; margin:0 0 4px;
+  }
+  .panel .desc{color:var(--sub); font-size:13px; margin:0 0 20px;}
+
+  label{
+    display:block; font-size:12.5px; font-weight:700; color:var(--sub);
+    margin-bottom:6px; letter-spacing:.02em;
+  }
+  input[type=text], input[type=number]{
+    width:100%; padding:10px 12px; font-size:14.5px;
+    border:1px solid var(--line); border-radius:6px;
+    background:#FCFCFD; color:var(--ink);
+    font-family:"JetBrains Mono",monospace;
+    transition:border-color .15s;
+  }
+  input:focus{outline:none; border-color:var(--navy); background:#fff;}
+  .field{margin-bottom:16px;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .row3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    background:var(--navy); color:#fff;
+    font-weight:700; font-size:13.5px; letter-spacing:.02em;
+    padding:11px 22px; border-radius:6px;
+    transition:background .15s, transform .1s;
+  }
+  .btn:hover{background:#0f2c4b;}
+  .btn:active{transform:scale(.98);}
+  .btn:disabled{background:#B7C0C9; cursor:not-allowed;}
+  .btn.ghost{
+    background:transparent; color:var(--navy); border:1.5px solid var(--line);
+  }
+  .btn.ghost:hover{border-color:var(--navy); background:#F2F5F8;}
+
+  .info-card{
+    background:#F5F7F9; border:1px solid var(--line-soft); border-radius:8px;
+    padding:16px 18px; margin-bottom:18px;
+    display:grid; grid-template-columns:repeat(3,1fr); gap:14px;
+  }
+  .info-card .ic-label{font-size:11px; color:var(--sub); font-weight:700; letter-spacing:.03em;}
+  .info-card .ic-val{font-family:"JetBrains Mono",monospace; font-size:16px; font-weight:700; margin-top:3px;}
+
+  .yield-preview{
+    margin-top:4px; font-size:13px; color:var(--sub);
+  }
+  .yield-preview strong{color:var(--pos); font-family:"JetBrains Mono",monospace; font-size:15px;}
+
+  table.fin-table{
+    width:100%; border-collapse:collapse; margin-top:6px; font-size:13.5px;
+  }
+  table.fin-table th, table.fin-table td{
+    padding:9px 10px; text-align:right; border-bottom:1px solid var(--line-soft);
+  }
+  table.fin-table th:first-child, table.fin-table td:first-child{text-align:left;}
+  table.fin-table thead th{
+    color:var(--sub); font-size:11.5px; font-weight:700; border-bottom:2px solid var(--line);
+  }
+  table.fin-table td{font-family:"JetBrains Mono",monospace;}
+  table.fin-table td.cagr-pos{color:var(--pos); font-weight:700;}
+  table.fin-table td.cagr-neg{color:var(--neg); font-weight:700;}
+  table.fin-table td.dim{color:var(--sub);}
+
+  .manual-block{margin-bottom:20px;}
+  .manual-block h3{
+    font-size:13px; margin:0 0 12px; color:var(--ink);
+    display:flex; align-items:center; gap:8px;
+  }
+  .manual-block h3::before{
+    content:""; width:3px; height:14px; background:var(--amber); display:inline-block; border-radius:2px;
+  }
+
+  .result-imgs{display:flex; flex-direction:column; gap:18px; margin:20px 0;}
+  .result-imgs img{width:100%; border:1px solid var(--line); border-radius:8px; background:#fff;}
+
+  .actions{display:flex; gap:12px; margin-top:22px; align-items:center;}
+  .status-msg{font-size:13px; color:var(--sub); margin-top:10px; min-height:18px;}
+  .status-msg.err{color:var(--neg); font-weight:600;}
+  .status-msg.ok{color:var(--pos); font-weight:600;}
+
+  .spinner{
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
+    display:inline-block; vertical-align:-2px; margin-right:8px;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .download-card{
+    display:flex; align-items:center; justify-content:space-between;
+    background:#F2F8F5; border:1px solid #CDE7DC; border-radius:8px;
+    padding:16px 20px; margin-top:8px;
+  }
+  .download-card .dl-name{font-family:"JetBrains Mono",monospace; font-size:13.5px; color:var(--ink);}
+  .download-card .dl-sub{font-size:11.5px; color:var(--sub); margin-top:2px;}
+
+  @media (max-width: 760px){
+    .shell{grid-template-columns:1fr; padding:24px 16px 60px;}
+    nav.rail{
+      flex-direction:row; overflow-x:auto; gap:0; padding-bottom:6px;
+    }
+    .rail-step::after{display:none;}
+    .rail-text .t2{display:none;}
+    .info-card{grid-template-columns:1fr 1fr;}
+    .row2, .row3{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div id="ticker">
+  <span class="tk-item" id="tk-code"><span class="tk-label">CODE</span><span class="tk-val">――</span></span>
+  <span class="tk-item" id="tk-name"><span class="tk-label">銘柄</span><span class="tk-val">未選択</span></span>
+  <span class="tk-item" id="tk-price"><span class="tk-label">株価</span><span class="tk-val">――</span></span>
+  <span class="tk-item" id="tk-fy"><span class="tk-label">決算月</span><span class="tk-val">――</span></span>
+  <span class="tk-item" id="tk-yield"><span class="tk-label">予想利回り</span><span class="tk-val">――</span></span>
+</div>
+
+<div class="tabbar">
+  <button class="tab-btn active" id="tab-btn-new" data-view="new">新規スクリーニング</button>
+  <button class="tab-btn" id="tab-btn-history" data-view="history">過去の分析</button>
+  <button class="tab-btn" id="tab-btn-batch" data-view="batch">バッチ処理</button>
+</div>
+
+<div class="shell" id="view-new">
+  <header class="page-head">
+    <h1>株式財務スクリーニングツール</h1>
+    <p>銘柄コードを入力し、画面の手順に沿って進めてください。エンジンは Python（yfinance）です。</p>
+  </header>
+
+  <nav class="rail" id="rail">
+    <div class="rail-step active" data-step="1">
+      <div class="rail-num">1</div>
+      <div class="rail-text">
+        <div class="t1">銘柄・予想DPS</div>
+        <div class="t2">コード入力 → 基本情報取得</div>
+      </div>
+    </div>
+    <div class="rail-step" data-step="2">
+      <div class="rail-num">2</div>
+      <div class="rail-text">
+        <div class="t1">過去3年財務データ</div>
+        <div class="t2">EPS/DPS/FCF/有利子負債 自動取得</div>
+      </div>
+    </div>
+    <div class="rail-step" data-step="3">
+      <div class="rail-num">3</div>
+      <div class="rail-text">
+        <div class="t1">短信からの手入力</div>
+        <div class="t2">現預金・配当支払総額</div>
+      </div>
+    </div>
+    <div class="rail-step" data-step="4">
+      <div class="rail-num">4</div>
+      <div class="rail-text">
+        <div class="t1">グラフ & Excel出力</div>
+        <div class="t2">保存して完了</div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="panels">
+
+    <!-- STEP 1 -->
+    <section class="panel show" id="panel-1">
+      <h2>Step 1 — 銘柄コード入力</h2>
+      <p class="desc">証券コード（例: 4914）を入力してください。銘柄名・決算月・株価を自動取得します。</p>
+
+      <div class="field" style="max-width:280px;">
+        <label for="in-code">銘柄コード</label>
+        <input type="text" id="in-code" placeholder="例: 4914" autocomplete="off">
+      </div>
+      <div class="actions">
+        <button class="btn" id="btn-fetch-basic">基本情報を取得</button>
+      </div>
+      <div class="status-msg" id="msg-1"></div>
+
+      <div id="basic-result" style="display:none; margin-top:22px;">
+        <div class="info-card">
+          <div><div class="ic-label">銘柄名</div><div class="ic-val" id="res-name">—</div></div>
+          <div><div class="ic-label">ティッカー</div><div class="ic-val mono" id="res-ticker">—</div></div>
+          <div><div class="ic-label">現在株価</div><div class="ic-val" id="res-price">—</div></div>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label for="in-fiscal">決算月（自動推定を確認・修正可）</label>
+            <input type="number" id="in-fiscal" min="1" max="12" placeholder="例: 3">
+          </div>
+          <div class="field">
+            <label for="in-dps">予想DPS（円）</label>
+            <input type="number" id="in-dps" min="0" step="0.01" placeholder="例: 60">
+          </div>
+        </div>
+        <div class="yield-preview" id="yield-preview">予想DPSを入力すると予想配当利回りを表示します</div>
+
+        <div class="actions">
+          <button class="btn" id="btn-proceed">Proceed（過去3年財務データを取得）</button>
+        </div>
+        <div class="status-msg" id="msg-2"></div>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="panel" id="panel-2">
+      <h2>Step 2 — 過去3年財務データ</h2>
+      <p class="desc">yfinance から取得した EPS・DPS実績・FCF・有利子負債と、3年 CAGR です。</p>
+      <div style="overflow-x:auto;">
+        <table class="fin-table" id="fin-table">
+          <thead><tr id="fin-thead"></tr></thead>
+          <tbody id="fin-tbody"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btn-to-step3">次へ（短信データを入力）</button>
+        <button class="btn ghost" id="btn-cancel-step2">キャンセル（Step1に戻る）</button>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="panel" id="panel-3">
+      <h2>Step 3 — 短信からの手入力</h2>
+      <p class="desc">決算短信を参照し、過去3年分の現預金残高・配当支払総額を入力してください（百万円）。</p>
+
+      <!-- Step2の財務テーブル（編集可能） -->
+      <div class="manual-block" id="step3-fin-wrap" style="display:none;">
+        <h3>財務データ編集（自動取得値を修正できます）</h3>
+        <div style="overflow-x:auto;">
+          <table class="fin-table" id="step3-fin-table">
+            <thead><tr id="step3-fin-thead"></tr></thead>
+            <tbody id="step3-fin-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="manual-block">
+        <h3>現預金残高（百万円）</h3>
+        <div class="row3" id="cash-inputs"></div>
+      </div>
+      <div class="manual-block">
+        <h3>配当支払総額（百万円）</h3>
+        <div class="row3" id="div-inputs"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="btn-generate">グラフ作成 & Excel出力</button>
+        <button class="btn ghost" id="btn-edit-step2">財務データを編集</button>
+        <button class="btn ghost" id="btn-cancel-step3">キャンセル（Step1に戻る）</button>
+      </div>
+      <div class="status-msg" id="msg-3"></div>
+    </section>
+
+    <!-- STEP 4 -->
+    <section class="panel" id="panel-4">
+      <h2>Step 4 — 完了</h2>
+      <p class="desc">短信入力を反映した最終指標と、3種類のグラフをExcelに貼り付けました。</p>
+
+      <div style="overflow-x:auto; margin-bottom:22px;">
+        <table class="fin-table" id="final-fin-table">
+          <thead><tr id="final-fin-thead"></tr></thead>
+          <tbody id="final-fin-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="result-imgs" id="result-imgs"></div>
+
+      <div class="download-card">
+        <div>
+          <div class="dl-name" id="dl-filename">—</div>
+          <div class="dl-sub">Documents フォルダ相当の outputs フォルダにも保存済みです</div>
+        </div>
+        <a class="btn" id="dl-link" href="#" download>Excelをダウンロード</a>
+      </div>
+
+      <div class="actions">
+        <button class="btn ghost" id="btn-restart">別の銘柄を続けて調べる</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="shell-single" id="view-batch" style="display:none;">
+  <header class="page-head">
+    <h1>バッチ処理</h1>
+    <p>Excelファイルをアップロードすると、複数銘柄を一括スクリーニングします。</p>
+  </header>
+
+  <!-- ファイル選択エリア -->
+  <section class="panel show" id="batch-upload-panel">
+    <h2 class="step-title">📂 入力ファイル選択</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">
+      列順: <b>コード / 決算月 / 予想DPS / 現預金-2 / 現預金-1 / 現預金 / 配当金支払総額-2 / 配当金支払総額-1 / 配当金支払総額</b><br>
+      1行目はヘッダー。空白行が来たら終了。
+    </p>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <label class="btn" style="cursor:pointer;">
+        📁 Excelファイルを選択
+        <input type="file" id="in-batch-file" accept=".xlsx,.xls" style="display:none;">
+      </label>
+      <span id="batch-filename" style="color:var(--muted);font-size:13px;">ファイル未選択</span>
+    </div>
+    <button class="btn" id="btn-batch-run" disabled>▶ バッチ実行</button>
+  </section>
+
+  <!-- 進捗表示（.panel show で制御） -->
+  <section class="panel" id="batch-progress-panel">
+    <h2 class="step-title">⏳ 処理中...</h2>
+    <div style="margin:12px 0;">
+      <div style="background:#e5e7eb;border-radius:8px;height:14px;overflow:hidden;">
+        <div id="batch-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.4s;border-radius:8px;"></div>
+      </div>
+      <p id="batch-progress-text" style="margin-top:10px;font-size:13px;color:var(--muted);">準備中...</p>
+    </div>
+  </section>
+
+  <!-- 結果表示（.panel show で制御） -->
+  <section class="panel" id="batch-result-panel">
+    <h2 class="step-title">📊 処理結果</h2>
+
+    <!-- 成功メッセージ＋リスト -->
+    <div id="batch-succeeded-wrap" style="margin-bottom:20px;">
+      <p id="batch-success-msg" style="font-size:15px;font-weight:700;color:#065f46;margin-bottom:10px;"></p>
+      <ul id="batch-succeeded-list" style="margin:0;padding-left:20px;font-size:14px;line-height:1.9;"></ul>
+    </div>
+
+    <!-- 失敗メッセージ＋リスト -->
+    <div id="batch-failed-wrap" style="margin-bottom:24px;">
+      <p id="batch-fail-msg" style="font-size:15px;font-weight:700;color:#991b1b;margin-bottom:10px;"></p>
+      <ul id="batch-failed-list" style="margin:0;padding-left:20px;font-size:14px;line-height:1.9;color:#991b1b;"></ul>
+    </div>
+
+    <!-- 完了後ボタン -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <button class="btn" id="btn-batch-to-history">📋 分析一覧へ</button>
+      <button class="btn ghost" id="btn-batch-another">📂 別のファイルを処理</button>
+    </div>
+  </section>
+</div>
+
+<div class="shell-single" id="view-history" style="display:none;">
+  <header class="page-head">
+    <h1>過去の分析資料</h1>
+    <p>コードまたは銘柄名の一部で検索できます。空欄のまま検索すると全件が表示されます。</p>
+  </header>
+
+  <section class="panel show" id="history-list-panel">
+    <div class="history-search-row">
+      <input type="text" id="in-history-q" placeholder="例: 4914 または 高砂 （空欄で全件）" autocomplete="off">
+      <button class="btn" id="btn-history-search">検索</button>
+    </div>
+    <div class="status-msg" id="msg-history"></div>
+
+    <div style="overflow-x:auto;">
+      <table class="fin-table history-table" id="history-table">
+        <thead>
+          <tr>
+            <th>銘柄名</th><th>コード</th><th>実行日時</th><th>株価</th><th>予想利回り</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty-hint" id="history-empty" style="display:none;">該当する分析資料が見つかりませんでした。</div>
+  </section>
+
+  <section class="panel" id="history-detail-panel">
+    <div class="actions" style="margin-top:0; margin-bottom:18px; justify-content:space-between;">
+      <button class="btn ghost" id="btn-history-back">← 一覧に戻る</button>
+      <button class="btn danger" id="btn-history-delete">この分析資料を削除</button>
+    </div>
+    <h2 id="hd-title">—</h2>
+    <p class="desc" id="hd-sub">—</p>
+
+    <div class="info-card">
+      <div><div class="ic-label">株価（当時）</div><div class="ic-val" id="hd-price">—</div></div>
+      <div><div class="ic-label">予想DPS</div><div class="ic-val" id="hd-dps">—</div></div>
+      <div><div class="ic-label">予想配当利回り</div><div class="ic-val" id="hd-yield">—</div></div>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="fin-table" id="hd-fin-table">
+        <thead><tr id="hd-fin-thead"></tr></thead>
+        <tbody id="hd-fin-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="result-imgs" id="hd-result-imgs"></div>
+
+    <div class="download-card">
+      <div>
+        <div class="dl-name" id="hd-filename">—</div>
+        <div class="dl-sub">outputs フォルダに保存済みのファイルです</div>
+      </div>
+      <a class="btn" id="hd-dl-link" href="#" download>Excelをダウンロード</a>
+    </div>
+  </section>
+</div>
+
+<script>
+const state = {};
+const historyState = {loaded: false};
+
+function setRailStep(n){
+  document.querySelectorAll('.rail-step').forEach(el=>{
+    const s = parseInt(el.dataset.step, 10);
+    el.classList.toggle('active', s === n);
+    el.classList.toggle('done', s < n);
+  });
+  document.querySelectorAll('.panel').forEach(el=>{
+    el.classList.toggle('show', el.id === 'panel-' + n);
+  });
+}
+
+function fmtYen(v){
+  return (v === null || v === undefined) ? '—' : '¥' + Number(v).toLocaleString(undefined,{maximumFractionDigits:0});
+}
+
+function renderFinTable(theadEl, tbodyEl, fys, rows){
+  theadEl.innerHTML = '<th>指標</th>' + fys.map(fy => `<th>FY${fy}</th>`).join('') + '<th>CAGR（3年）</th>';
+  tbodyEl.innerHTML = rows.map(row => {
+    const cells = row.values.map(v => `<td class="${v===null?'dim':''}">${v===null?'—':Number(v).toLocaleString(undefined,{maximumFractionDigits:2})}</td>`).join('');
+    let cagrCell = '<td class="dim">—</td>';
+    if(row.cagr !== null && row.cagr !== undefined){
+      const cls = row.cagr >= 0 ? 'cagr-pos' : 'cagr-neg';
+      const sign = row.cagr >= 0 ? '+' : '';
+      cagrCell = `<td class="${cls}">${sign}${row.cagr.toFixed(1)}%</td>`;
+    }
+    return `<tr><td>${row.label}</td>${cells}${cagrCell}</tr>`;
+  }).join('');
+}
+
+function setStatus(id, text, kind){
+  const el = document.getElementById(id);
+  el.textContent = text || '';
+  el.className = 'status-msg' + (kind ? ' ' + kind : '');
+}
+
+function updateTicker(){
+  const set = (id, label, val, cls) => {
+    const el = document.getElementById(id);
+    const v = el.querySelector('.tk-val');
+    if(val === undefined || val === null || val === ''){
+      el.classList.remove('filled');
+      v.textContent = '――';
+      v.className = 'tk-val';
+    } else {
+      el.classList.add('filled');
+      v.textContent = val;
+      v.className = 'tk-val' + (cls ? ' ' + cls : '');
+    }
+  };
+  set('tk-code', 'CODE', state.code);
+  set('tk-name', '銘柄', state.name);
+  set('tk-price', '株価', state.price ? fmtYen(state.price) : null);
+  set('tk-fy', '決算月', state.fiscal_month ? state.fiscal_month + '月' : null);
+  set('tk-yield', '予想利回り', (state.fore_yield !== undefined) ? state.fore_yield.toFixed(2) + '%' : null, 'pos');
+}
+
+async function postJSON(url, body){
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {})
+  });
+  const data = await resp.json().catch(()=>({error:'サーバー応答の解析に失敗しました'}));
+  if(!resp.ok){
+    throw new Error(data.error || ('エラーが発生しました（HTTP ' + resp.status + '）'));
+  }
+  return data;
+}
+
+function updateYieldPreview(){
+  const dps = parseFloat(document.getElementById('in-dps').value);
+  const price = state.price;
+  const el = document.getElementById('yield-preview');
+  if(!isNaN(dps) && price){
+    const y = dps / price * 100;
+    el.innerHTML = '予想配当利回り：<strong>' + y.toFixed(2) + '%</strong>';
+  } else {
+    el.textContent = '予想DPSを入力すると予想配当利回りを表示します';
+  }
+}
+document.getElementById('in-dps').addEventListener('input', updateYieldPreview);
+
+// ── Step1: 基本情報取得 ─────────────────────────
+document.getElementById('btn-fetch-basic').addEventListener('click', async () => {
+  const code = document.getElementById('in-code').value.trim();
+  if(!code){ setStatus('msg-1', '銘柄コードを入力してください。', 'err'); return; }
+
+  const btn = document.getElementById('btn-fetch-basic');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>取得中...';
+  setStatus('msg-1', '');
+
+  try{
+    const data = await postJSON('/api/step1', {code});
+    state.code = code;
+    state.ticker = data.ticker;
+    state.name = data.name;
+    state.price = data.price;
+    state.fiscal_month_auto = data.fiscal_month_auto;
+
+    document.getElementById('res-name').textContent = data.name;
+    document.getElementById('res-ticker').textContent = data.ticker;
+    document.getElementById('res-price').textContent = fmtYen(data.price);
+    document.getElementById('in-fiscal').value = data.fiscal_month_auto || '';
+    document.getElementById('basic-result').style.display = 'block';
+    updateYieldPreview();
+    updateTicker();
+  } catch(e){
+    setStatus('msg-1', e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = '基本情報を取得';
+  }
+});
+
+// ── Step1→2: Proceed（財務データ取得） ─────────
+document.getElementById('btn-proceed').addEventListener('click', async () => {
+  const fiscalMonth = parseInt(document.getElementById('in-fiscal').value, 10);
+  const dps = parseFloat(document.getElementById('in-dps').value);
+
+  if(isNaN(fiscalMonth) || fiscalMonth < 1 || fiscalMonth > 12){
+    setStatus('msg-2', '決算月は1〜12で入力してください。', 'err'); return;
+  }
+  if(isNaN(dps) || dps < 0){
+    setStatus('msg-2', '予想DPSを正しく入力してください。', 'err'); return;
+  }
+
+  const btn = document.getElementById('btn-proceed');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>財務データ取得中...';
+  setStatus('msg-2', '');
+
+  try{
+    const data = await postJSON('/api/step2', {fiscal_month: fiscalMonth, forecast_dps: dps});
+    state.fiscal_month = fiscalMonth;
+    state.forecast_dps = dps;
+    state.fore_yield = data.fore_yield;
+    state.fys = data.fys;
+    updateTicker();
+
+    // テーブル描画
+    renderFinTable(
+      document.getElementById('fin-thead'),
+      document.getElementById('fin-tbody'),
+      data.fys, data.rows
+    );
+
+    // Step3の入力欄を年度に合わせて生成
+    const cashWrap = document.getElementById('cash-inputs');
+    const divWrap = document.getElementById('div-inputs');
+    cashWrap.innerHTML = data.fys.map((fy,i) => `
+      <div class="field">
+        <label>FY${fy}</label>
+        <input type="number" step="0.1" class="cash-in" data-idx="${i}" placeholder="百万円">
+      </div>`).join('');
+    divWrap.innerHTML = data.fys.map((fy,i) => `
+      <div class="field">
+        <label>FY${fy}</label>
+        <input type="number" step="0.1" class="div-in" data-idx="${i}" placeholder="百万円">
+      </div>`).join('');
+
+    setRailStep(2);
+  } catch(e){
+    setStatus('msg-2', e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Proceed（過去3年財務データを取得）';
+  }
+});
+
+document.getElementById('btn-to-step3').addEventListener('click', () => setRailStep(3));
+
+// ── Step2: キャンセル（Step1に戻る） ────────────
+document.getElementById('btn-cancel-step2').addEventListener('click', () => {
+  document.getElementById('basic-result').style.display = 'none';
+  document.getElementById('in-code').value = '';
+  document.getElementById('in-fiscal').value = '';
+  document.getElementById('in-dps').value = '';
+  Object.keys(state).forEach(k => delete state[k]);
+  updateYieldPreview();
+  updateTicker();
+  setRailStep(1);
+});
+
+// ── Step3: キャンセル（Step1に戻る） ────────────
+document.getElementById('btn-cancel-step3').addEventListener('click', () => {
+  document.getElementById('basic-result').style.display = 'none';
+  document.getElementById('in-code').value = '';
+  document.getElementById('in-fiscal').value = '';
+  document.getElementById('in-dps').value = '';
+  Object.keys(state).forEach(k => delete state[k]);
+  updateYieldPreview();
+  updateTicker();
+  setRailStep(1);
+});
+
+// ── Step3: 財務データ編集ボタン ─────────────────
+// Step2で取得したテーブルをStep3内にコピーして各セルを編集可能にする
+document.getElementById('btn-edit-step2').addEventListener('click', () => {
+  const wrap = document.getElementById('step3-fin-wrap');
+  const isOpen = wrap.style.display !== 'none';
+  if(isOpen){
+    // 閉じる
+    wrap.style.display = 'none';
+    document.getElementById('btn-edit-step2').textContent = '財務データを編集';
+    return;
+  }
+
+  // Step2のテーブル内容をコピー
+  const srcThead = document.getElementById('fin-thead');
+  const srcTbody = document.getElementById('fin-tbody');
+  const dstThead = document.getElementById('step3-fin-thead');
+  const dstTbody = document.getElementById('step3-fin-tbody');
+
+  // ヘッダーはそのままコピー
+  dstThead.innerHTML = srcThead.innerHTML;
+
+  // ボディ: 各データセルをinputに変換（ラベル列とCAGR列はそのまま）
+  const rows = srcTbody.querySelectorAll('tr');
+  dstTbody.innerHTML = '';
+  rows.forEach((tr, rowIdx) => {
+    const newTr = document.createElement('tr');
+    const tds = tr.querySelectorAll('td');
+    tds.forEach((td, colIdx) => {
+      const newTd = document.createElement('td');
+      // 最初の列（ラベル）と最後の列（CAGR）はそのまま
+      if(colIdx === 0 || colIdx === tds.length - 1){
+        newTd.textContent = td.textContent;
+        if(colIdx === tds.length - 1) newTd.className = td.className;
+      } else {
+        // データ列はinputに変換
+        const val = td.textContent.trim();
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = 'any';
+        input.value = (val === '—' || val === '') ? '' : val.replace(/,/g, '');
+        input.style.cssText = 'width:90px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;';
+        input.dataset.rowIdx = rowIdx;
+        input.dataset.colIdx = colIdx - 1; // FY列の0始まりインデックス
+        input.className = 'fin-edit-input';
+        newTd.appendChild(input);
+      }
+      newTr.appendChild(newTd);
+    });
+    dstTbody.appendChild(newTr);
+  });
+
+  wrap.style.display = '';
+  document.getElementById('btn-edit-step2').textContent = '編集を閉じる';
+});
+
+// ── Step3→4: グラフ生成 & Excel出力 ────────────
+document.getElementById('btn-generate').addEventListener('click', async () => {
+  const cashVals = Array.from(document.querySelectorAll('.cash-in')).map(i => i.value);
+  const divVals = Array.from(document.querySelectorAll('.div-in')).map(i => i.value);
+
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>グラフ作成・Excel出力中...';
+  setStatus('msg-3', '');
+
+  try{
+    const data = await postJSON('/api/step3', {cash_vals: cashVals, div_pay_vals: divVals});
+
+    const imgWrap = document.getElementById('result-imgs');
+    imgWrap.innerHTML = '';
+    ['fig_a','fig_b','fig_c'].forEach(key => {
+      if(data.images[key]){
+        const img = document.createElement('img');
+        img.src = data.images[key];
+        imgWrap.appendChild(img);
+      }
+    });
+
+    renderFinTable(
+      document.getElementById('final-fin-thead'),
+      document.getElementById('final-fin-tbody'),
+      data.fys, data.rows
+    );
+
+    document.getElementById('dl-filename').textContent = data.filename;
+    document.getElementById('dl-link').href = data.download_url;
+
+    setRailStep(4);
+  } catch(e){
+    setStatus('msg-3', e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'グラフ作成 & Excel出力';
+  }
+});
+
+// ── リスタート ───────────────────────────────
+document.getElementById('btn-restart').addEventListener('click', () => {
+  Object.keys(state).forEach(k => delete state[k]);
+  document.getElementById('in-code').value = '';
+  document.getElementById('in-fiscal').value = '';
+  document.getElementById('in-dps').value = '';
+  document.getElementById('basic-result').style.display = 'none';
+  updateYieldPreview();
+  updateTicker();
+  setRailStep(1);
+});
+
+// ══════════════════════════════════════════════
+//  タブ切り替え
+// ══════════════════════════════════════════════
+function switchTab(view){
+  document.getElementById('tab-btn-new').classList.toggle('active', view === 'new');
+  document.getElementById('tab-btn-batch').classList.toggle('active', view === 'batch');
+  document.getElementById('tab-btn-history').classList.toggle('active', view === 'history');
+  document.getElementById('view-new').style.display = (view === 'new') ? 'grid' : 'none';
+  document.getElementById('view-batch').style.display = (view === 'batch') ? 'flex' : 'none';
+  document.getElementById('view-history').style.display = (view === 'history') ? 'flex' : 'none';
+  if(view === 'history'){
+    // 常にフレッシュな状態で一覧トップを表示する:
+    // 1. 詳細パネルを閉じて一覧パネルに戻す
+    document.getElementById('history-list-panel').classList.add('show');
+    document.getElementById('history-detail-panel').classList.remove('show');
+    // 2. 検索欄をクリアして全件再取得
+    document.getElementById('in-history-q').value = '';
+    loadHistory('');
+    historyState.loaded = true;
+  }
+}
+document.getElementById('tab-btn-new').addEventListener('click', () => switchTab('new'));
+document.getElementById('tab-btn-batch').addEventListener('click', () => switchTab('batch'));
+document.getElementById('tab-btn-history').addEventListener('click', () => switchTab('history'));
+
+// ══════════════════════════════════════════════
+//  過去の分析（履歴）
+// ══════════════════════════════════════════════
+
+function fmtDateTime(iso){
+  if(!iso) return '—';
+  try{
+    const d = new Date(iso);
+    return d.toLocaleString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+  } catch(e){ return iso; }
+}
+
+async function loadHistory(q){
+  const tbody = document.getElementById('history-tbody');
+  const emptyHint = document.getElementById('history-empty');
+  historyState.lastQuery = q || '';
+  setStatus('msg-history', '検索中...');
+  try{
+    const resp = await fetch('/api/history?q=' + encodeURIComponent(q || ''));
+    const data = await resp.json();
+    historyState.loaded = true;
+    setStatus('msg-history', '');
+
+    if(!data.results || data.results.length === 0){
+      tbody.innerHTML = '';
+      emptyHint.style.display = 'block';
+      return;
+    }
+    emptyHint.style.display = 'none';
+
+    tbody.innerHTML = data.results.map(r => `
+      <tr data-id="${r.id}">
+        <td>${r.name || '—'}</td>
+        <td class="mono">${r.code || '—'}</td>
+        <td class="mono">${fmtDateTime(r.created_at)}</td>
+        <td class="mono">${r.price ? fmtYen(r.price) : '—'}</td>
+        <td class="mono">${(r.fore_yield !== null && r.fore_yield !== undefined) ? r.fore_yield.toFixed(2) + '%' : '—'}</td>
+        <td>
+          <button class="btn-view-row" data-id="${r.id}">表示</button>
+          <button class="btn-delete-row" data-id="${r.id}" data-name="${(r.name || '').replace(/"/g,'&quot;')}">削除</button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('tr, .btn-view-row').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = el.dataset.id || el.closest('tr').dataset.id;
+        showHistoryDetail(id);
+      });
+    });
+
+    tbody.querySelectorAll('.btn-delete-row').forEach(el => {
+      el.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = el.dataset.id;
+        const name = el.dataset.name || 'この分析資料';
+        if(!confirm(`「${name}」を削除します。よろしいですか？\n（Excelファイルもあわせて削除され、元に戻せません）`)){
+          return;
+        }
+        await deleteHistoryEntry(id);
+      });
+    });
+  } catch(e){
+    setStatus('msg-history', '検索に失敗しました: ' + e.message, 'err');
+  }
+}
+
+document.getElementById('btn-history-search').addEventListener('click', () => {
+  loadHistory(document.getElementById('in-history-q').value.trim());
+});
+document.getElementById('in-history-q').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ loadHistory(document.getElementById('in-history-q').value.trim()); }
+});
+
+async function showHistoryDetail(id){
+  setStatus('msg-history', '');
+  try{
+    const resp = await fetch('/api/history/' + encodeURIComponent(id));
+    const data = await resp.json();
+    if(!resp.ok){ throw new Error(data.error || '取得に失敗しました'); }
+
+    historyState.currentDetailId = data.id;
+    historyState.currentDetailName = data.name;
+
+    document.getElementById('hd-title').textContent = `${data.name}（${data.code}）`;
+    document.getElementById('hd-sub').textContent = `実行日時: ${fmtDateTime(data.created_at)}　決算月: ${data.fiscal_month || '—'}月`;
+    document.getElementById('hd-price').textContent = data.price ? fmtYen(data.price) : '—';
+    document.getElementById('hd-dps').textContent = (data.forecast_dps !== null && data.forecast_dps !== undefined) ? '¥' + Number(data.forecast_dps).toLocaleString() : '—';
+    document.getElementById('hd-yield').textContent = (data.fore_yield !== null && data.fore_yield !== undefined) ? data.fore_yield.toFixed(2) + '%' : '—';
+
+    renderFinTable(
+      document.getElementById('hd-fin-thead'),
+      document.getElementById('hd-fin-tbody'),
+      data.fys, data.rows
+    );
+
+    const imgWrap = document.getElementById('hd-result-imgs');
+    imgWrap.innerHTML = '';
+    ['fig_a','fig_b','fig_c'].forEach(key => {
+      if(data.images && data.images[key]){
+        const img = document.createElement('img');
+        img.src = data.images[key];
+        imgWrap.appendChild(img);
+      }
+    });
+
+    document.getElementById('hd-filename').textContent = data.filename || '—';
+    const dlLink = document.getElementById('hd-dl-link');
+    if(data.download_url){
+      dlLink.href = data.download_url;
+      dlLink.style.pointerEvents = '';
+      dlLink.style.opacity = '';
+    } else {
+      dlLink.removeAttribute('href');
+      dlLink.style.pointerEvents = 'none';
+      dlLink.style.opacity = '.5';
+    }
+
+    document.getElementById('history-list-panel').classList.remove('show');
+    document.getElementById('history-detail-panel').classList.add('show');
+  } catch(e){
+    setStatus('msg-history', e.message, 'err');
+  }
+}
+
+async function deleteHistoryEntry(id){
+  try{
+    const resp = await fetch('/api/history/' + encodeURIComponent(id), {method: 'DELETE'});
+    const data = await resp.json().catch(() => ({}));
+    if(!resp.ok){ throw new Error(data.error || '削除に失敗しました'); }
+
+    // 詳細画面を表示中に削除した場合は一覧に戻る
+    if(document.getElementById('history-detail-panel').classList.contains('show')){
+      document.getElementById('history-detail-panel').classList.remove('show');
+      document.getElementById('history-list-panel').classList.add('show');
+    }
+    await loadHistory(historyState.lastQuery || '');
+  } catch(e){
+    setStatus('msg-history', e.message, 'err');
+  }
+}
+
+document.getElementById('btn-history-delete').addEventListener('click', async () => {
+  const id = historyState.currentDetailId;
+  const name = historyState.currentDetailName || 'この分析資料';
+  if(!id) return;
+  if(!confirm(`「${name}」を削除します。よろしいですか？\n（Excelファイルもあわせて削除され、元に戻せません）`)){
+    return;
+  }
+  await deleteHistoryEntry(id);
+});
+
+document.getElementById('btn-history-back').addEventListener('click', () => {
+  document.getElementById('history-detail-panel').classList.remove('show');
+  document.getElementById('history-list-panel').classList.add('show');
+});
+
+
+// ══════════════════════════════════════════════
+//  バッチ処理
+// ══════════════════════════════════════════════
+
+(function(){
+  let selectedFile = null;
+
+  // パネルの show/hide を .show クラスで統一管理する helper
+  function showPanel(id){
+    document.getElementById(id).classList.add('show');
+  }
+  function hidePanel(id){
+    document.getElementById(id).classList.remove('show');
+  }
+
+  // ファイル選択
+  document.getElementById('in-batch-file').addEventListener('change', function(e){
+    selectedFile = e.target.files[0] || null;
+    document.getElementById('batch-filename').textContent =
+      selectedFile ? selectedFile.name : 'ファイル未選択';
+    document.getElementById('btn-batch-run').disabled = !selectedFile;
+  });
+
+  // バッチ実行
+  document.getElementById('btn-batch-run').addEventListener('click', async function(){
+    if(!selectedFile) return;
+
+    // 進捗パネルを表示し、他を隠す
+    hidePanel('batch-upload-panel');
+    hidePanel('batch-result-panel');
+    showPanel('batch-progress-panel');
+    document.getElementById('batch-progress-bar').style.width = '0%';
+    document.getElementById('batch-progress-text').textContent = 'サーバーに送信中...';
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    // フェイク進捗アニメーション
+    let fakeProgress = 0;
+    const fakeTimer = setInterval(() => {
+      if(fakeProgress < 85){
+        fakeProgress += Math.random() * 4;
+        document.getElementById('batch-progress-bar').style.width = Math.min(fakeProgress, 85) + '%';
+        document.getElementById('batch-progress-text').textContent =
+          '処理中... （完了まで銘柄数 × 約5〜10秒かかります）';
+      }
+    }, 800);
+
+    try {
+      const resp = await fetch('/api/batch', { method: 'POST', body: formData });
+      clearInterval(fakeTimer);
+
+      const data = await resp.json();
+      if(!resp.ok) throw new Error(data.error || 'バッチ処理に失敗しました');
+
+      // プログレスバーを100%にしてから結果表示
+      document.getElementById('batch-progress-bar').style.width = '100%';
+      document.getElementById('batch-progress-text').textContent = '処理完了！';
+
+      setTimeout(() => {
+        hidePanel('batch-progress-panel');
+        showBatchResult(data);
+      }, 500);
+
+    } catch(e) {
+      clearInterval(fakeTimer);
+      hidePanel('batch-progress-panel');
+      showPanel('batch-upload-panel');
+      alert('エラー: ' + e.message);
+    }
+  });
+
+  // 結果表示
+  function showBatchResult(data){
+    const succCount = (data.succeeded || []).length;
+    const failCount = (data.failed   || []).length;
+
+    // ── 成功 ──
+    const succMsg  = document.getElementById('batch-success-msg');
+    const succList = document.getElementById('batch-succeeded-list');
+    succList.innerHTML = '';
+    if(succCount > 0){
+      succMsg.textContent = `下記の${succCount}社について、成功裡に分析が完了しました。`;
+      data.succeeded.forEach(item => {
+        const li = document.createElement('li');
+        li.innerHTML =
+          `${item.name}（${item.code}）　` +
+          `<a href="/download/${item.filename}" ` +
+          `style="color:var(--accent);font-size:12px;text-decoration:none;">⬇ Excel</a>`;
+        succList.appendChild(li);
+      });
+    } else {
+      succMsg.textContent = '';
+    }
+
+    // ── 失敗 ──
+    const failMsg  = document.getElementById('batch-fail-msg');
+    const failList = document.getElementById('batch-failed-list');
+    failList.innerHTML = '';
+    if(failCount > 0){
+      failMsg.textContent = `下記の${failCount}社について、分析に失敗しました。`;
+      data.failed.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = `${item.code}　—　${item.reason}`;
+        failList.appendChild(li);
+      });
+    } else {
+      failMsg.textContent = '';
+    }
+
+    showPanel('batch-result-panel');
+  }
+
+  // 「分析一覧へ」ボタン
+  document.getElementById('btn-batch-to-history').addEventListener('click', () => {
+    switchTab('history');
+  });
+
+  // 「別のファイルを処理」ボタン
+  document.getElementById('btn-batch-another').addEventListener('click', () => {
+    selectedFile = null;
+    document.getElementById('in-batch-file').value = '';
+    document.getElementById('batch-filename').textContent = 'ファイル未選択';
+    document.getElementById('btn-batch-run').disabled = true;
+    hidePanel('batch-result-panel');
+    showPanel('batch-upload-panel');
+  });
+
+})();
+
+</script>
+</body>
+</html>
